@@ -595,9 +595,24 @@ class GeoTIFFSlopeViewer:
         self.display_image_rgba[..., 0:3] = img_gray[..., np.newaxis]
         self.display_image_rgba[..., 3] = 255
         low_slope_mask = (self.slope_degrees < 5) & (~np.isnan(self.slope_degrees))
-        self.display_image_rgba[low_slope_mask, 0] = np.clip(img_gray[low_slope_mask] * 0.3, 0, 255)
-        self.display_image_rgba[low_slope_mask, 1] = np.clip(img_gray[low_slope_mask] * 0.7 + 100, 0, 255)
-        self.display_image_rgba[low_slope_mask, 2] = np.clip(img_gray[low_slope_mask] * 0.3, 0, 255)
+
+        # Create masks for south-facing slopes (SE, S, SW: 112.5° to 247.5°)
+        south_facing_mask = (
+            (self.aspect_degrees >= 112.5) & (self.aspect_degrees <= 247.5) & 
+            (~np.isnan(self.aspect_degrees))
+        )
+
+        # Green tint for low slope AND south-facing areas
+        optimal_mask = low_slope_mask & south_facing_mask
+        self.display_image_rgba[optimal_mask, 0] = np.clip(img_gray[optimal_mask] * 0.3, 0, 255)      # Less red
+        self.display_image_rgba[optimal_mask, 1] = np.clip(img_gray[optimal_mask] * 0.7 + 100, 0, 255)  # More green
+        self.display_image_rgba[optimal_mask, 2] = np.clip(img_gray[optimal_mask] * 0.3, 0, 255)      # Less blue
+
+        # Yellow tint for low slope but NOT south-facing areas
+        suboptimal_mask = low_slope_mask & (~south_facing_mask)
+        self.display_image_rgba[suboptimal_mask, 0] = np.clip(img_gray[suboptimal_mask] * 0.9 + 100, 0, 255)  # More red
+        self.display_image_rgba[suboptimal_mask, 1] = np.clip(img_gray[suboptimal_mask] * 0.8 + 100, 0, 255)  # More green
+        self.display_image_rgba[suboptimal_mask, 2] = np.clip(img_gray[suboptimal_mask] * 0.3, 0, 255)       # Less blue
         nan_mask = np.isnan(self.slope_degrees)
         self.display_image_rgba[nan_mask, 3] = 0
         self.ax.imshow(self.display_image_rgba)
@@ -609,7 +624,31 @@ class GeoTIFFSlopeViewer:
         cb = self.fig.colorbar(sm, ax=self.ax, orientation='horizontal', fraction=0.04, pad=0.08)
         cb.set_label('Slope [degrees]')
 
-        self.ax.set_title("Slope Map (<5° tinted Green)")
+        #self.ax.set_title("Slope Map (<5° tinted Green)")
+        title_y = 1.02
+        spacing = 0.12  # Fixed spacing between elements
+
+        # Clear any existing title
+        self.ax.set_title("")
+
+        self.ax.text(0.1 + spacing, title_y, "■", transform=self.ax.transAxes,
+                    color='#00AA00', fontsize=12, fontweight='normal')
+
+        self.ax.text(0.1 + spacing*1.5, title_y, "<5° + South", transform=self.ax.transAxes,
+                    color='black', fontsize=10, fontweight='bold')
+
+        self.ax.text(0.1 + spacing*3.5, title_y, "■", transform=self.ax.transAxes,
+                    color='#CCCC00', fontsize=12, fontweight='normal')
+
+        self.ax.text(0.1 + spacing*4, title_y, "<5° other", transform=self.ax.transAxes,
+                    color='black', fontsize=10, fontweight='bold')
+
+        self.ax.text(0.1 + spacing*5.5, title_y, "■", transform=self.ax.transAxes,
+                    color='#808080', fontsize=12, fontweight='normal')
+
+        self.ax.text(0.1 + spacing*6, title_y, "≥5°", transform=self.ax.transAxes,
+                    color='black', fontsize=10, fontweight='bold')
+
         self.ax.set_xlabel("Pixel X")
         self.ax.set_ylabel("Pixel Y")
         self.canvas.draw()
